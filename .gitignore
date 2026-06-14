@@ -1,4 +1,5 @@
-wandb/
-kaggle.json
 data/
-*.zip
+checkpoints/
+wandb/
+__pycache__/
+*.pt

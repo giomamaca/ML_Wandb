@@ -12,7 +12,6 @@ class MLP(nn.Module):
     def forward(self, x): return self.net(x)
 
 class SmallCNN(nn.Module):
-    """Iteration 2: 3 conv blocks, no regularization - expected to overfit"""
     def __init__(self, num_classes=7):
         super().__init__()
         self.features = nn.Sequential(
@@ -26,7 +25,6 @@ class SmallCNN(nn.Module):
     def forward(self, x): return self.classifier(self.features(x))
 
 class RegularizedCNN(nn.Module):
-    """Iteration 3: + BatchNorm + Dropout - train/val gap should shrink"""
     def __init__(self, num_classes=7, dropout=0.4):
         super().__init__()
         def block(cin, cout):

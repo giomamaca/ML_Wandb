@@ -7,6 +7,16 @@ import wandb
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 EMOTIONS = ['Angry','Disgust','Fear','Happy','Sad','Surprise','Neutral']
 
+def _ensure_media_tmp():
+    """Windows fix: wandb's temp media dir (used for plots/images/tables) can get
+    cleaned mid-run, which makes wandb.plot/Image/Table raise FileNotFoundError.
+    Recreate it right before logging media so the write succeeds."""
+    try:
+        from wandb.sdk.data_types._private import MEDIA_TMP
+        os.makedirs(MEDIA_TMP.name, exist_ok=True)
+    except Exception:
+        pass
+
 def evaluate(model, loader, criterion, return_preds=False):
     model.eval()
     loss_sum, correct, n = 0.0, 0, 0
@@ -61,21 +71,24 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
         print(f"epoch {epoch:2d} | train {train_loss:.3f}/{train_acc:.3f} | "
               f"val {val_loss:.3f}/{val_acc:.3f} | gap {train_acc-val_acc:+.3f}")
 
-        if val_acc > best_val_acc:                       # best model -> disk
+        if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(model.state_dict(), ckpt_path)
 
     wandb.summary['best_val_acc'] = best_val_acc
 
-    # reload best weights, final eval (PrivateTest if given, else val)
     model.load_state_dict(torch.load(ckpt_path))
     eval_loader = test_loader if test_loader is not None else val_loader
     split = 'test' if test_loader is not None else 'val'
     _, acc, preds, ys = evaluate(model, eval_loader, criterion, return_preds=True)
     wandb.summary[f'{split}_acc_best'] = acc
 
-    wandb.log({'confusion_matrix': wandb.plot.confusion_matrix(
-        preds=preds.tolist(), y_true=ys.tolist(), class_names=EMOTIONS)})
+    _ensure_media_tmp()
+    try:
+        wandb.log({'confusion_matrix': wandb.plot.confusion_matrix(
+            preds=preds.tolist(), y_true=ys.tolist(), class_names=EMOTIONS)})
+    except Exception as e:
+        print(f"[warn] confusion_matrix not logged: {e}")
 
     cm = np.zeros((7,7), dtype=int)                      # per-class accuracy
     for t,p in zip(ys, preds): cm[t,p] += 1

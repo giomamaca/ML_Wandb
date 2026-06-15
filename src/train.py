@@ -8,9 +8,6 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 EMOTIONS = ['Angry','Disgust','Fear','Happy','Sad','Surprise','Neutral']
 
 def _ensure_media_tmp():
-    """Windows fix: wandb's temp media dir (used for plots/images/tables) can get
-    cleaned mid-run, which makes wandb.plot/Image/Table raise FileNotFoundError.
-    Recreate it right before logging media so the write succeeds."""
     try:
         from wandb.sdk.data_types._private import MEDIA_TMP
         os.makedirs(MEDIA_TMP.name, exist_ok=True)
@@ -90,7 +87,7 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
     except Exception as e:
         print(f"[warn] confusion_matrix not logged: {e}")
 
-    cm = np.zeros((7,7), dtype=int)                      # per-class accuracy
+    cm = np.zeros((7,7), dtype=int)
     for t,p in zip(ys, preds): cm[t,p] += 1
     for i,name in enumerate(EMOTIONS):
         denom = cm[i].sum()

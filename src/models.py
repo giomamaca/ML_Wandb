@@ -1,7 +1,6 @@
 import torch.nn as nn
 
 class MLP(nn.Module):
-    """Iteration 1: baseline - expected to underfit (flatten loses spatial structure)"""
     def __init__(self, hidden=512, num_classes=7):
         super().__init__()
         self.net = nn.Sequential(

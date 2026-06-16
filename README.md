@@ -75,13 +75,7 @@ sanity checks-ს. ისინი წუთებში ცხადყოფ�
 ML_Wandb/
 ├── README.md
 ├── requirements.txt
-├── 01_mlp.ipynb             # MLP, Adam (underfit)
-├── 01_mlp_sgd.ipynb         # MLP, SGD (ოპტიმაიზერის შედარება)
-├── 02_small_cnn.ipynb       # SmallCNN (overfit)
-├── 03_regularized_cnn.ipynb # RegularizedCNN (BatchNorm + Dropout)
-├── 04_resnet.ipynb          # ResNet (48x48-ზე ადაპტირებული)
-├── 05_alexnet.ipynb         # AlexNet (მძიმე FC თავი -> overfit)
-├── 06_googlenet.ipynb       # GoogLeNet / Inception
+├── colab.ipynb              # მთავარი: setup + ყველა ექსპერიმენტი + ჰიპერპარამეტრები (GPU)
 ├── analysis.ipynb           # გრაფიკები + ანალიზი ქართულად
 ├── save_figures.py          # README-ის გრაფიკების გენერაცია
 └── src/
@@ -94,10 +88,13 @@ ML_Wandb/
 
 ## გაშვება
 
-1. ერთხელ: `wandb login` (key ინახება `~/.netrc`-ში).
-2. `train.csv` განათავსეთ რეპოზიტორიის მშობელ ფოლდერში (`../train.csv`).
-3. გაუშვით ექსპერიმენტები: `01_mlp.ipynb`, `02_small_cnn.ipynb`, `03_regularized_cnn.ipynb`, `04_resnet.ipynb`, `05_alexnet.ipynb`, `06_googlenet.ipynb`.
-4. ბოლოს გაუშვით `analysis.ipynb` — ის იღებს ყველა run-ს W&B-დან და ხატავს მრუდებს.
+პროექტი ეშვება **Colab-ზე (GPU)**:
+
+1. გახსენი `colab.ipynb` Colab-ში და ჩართე GPU: Runtime → Change runtime type → GPU.
+2. Secrets (🔑) → დაამატე `WANDB_KEY`.
+3. გაუშვი **setup** უჯრა — ატვირთავ `kaggle.json`-ს და `train.csv` ავტომატურად ჩამოიტვირთება.
+4. გაუშვი sanity check, არქიტექტურებისა და ჰიპერპარამეტრების უჯრები (რომელიც გინდა).
+5. ბოლოს გაუშვი `analysis.ipynb` — ყველა run-ს იღებს W&B-დან და ხატავს მრუდებს.
 
 ## იტერაცია 1 — MLP და underfitting
 

@@ -1,215 +1,204 @@
-# FER2013 — Facial Expression Recognition: An Iterative Architecture Study
+# FER2013 — სახის ემოციების ამოცნობა (იტერაციული კვლევა)
 
-PyTorch + Weights & Biases solution to the Kaggle
+PyTorch + Weights & Biases გადაწყვეტა Kaggle-ის კონკურსისთვის
 [*Challenges in Representation Learning: Facial Expression Recognition Challenge*](https://kaggle.com/competitions/challenges-in-representation-learning-facial-expression-recognition-challenge).
 
-The goal of this project is **not** to chase a single high score. Following the
-assignment, it grows a model **one motivated step at a time** and uses the
-train/validation curves to diagnose **underfitting** and **overfitting** — the
-*why* behind each result matters more than the raw number.
+ამ პროექტის მიზანი არ ყოფილა მხოლოდ ერთი მაღალი შედეგის მიღწევა. დავალების
+მოთხოვნის შესაბამისად, მოდელი იზრდება იტერაციულად — თითო მოტივირებული ნაბიჯით — და
+ყოველ ეტაპზე train/val მრუდების მიხედვით ვმსჯელობ, თუ რა ხდება და, რაც მთავარია,
+რატომ. ჩემთვის უფრო მნიშვნელოვანი იყო იმის გაგება, თუ რა იწვევს underfitting-სა და
+overfitting-ს, ვიდრე უბრალოდ accuracy-ს რიცხვის გაზრდა.
 
----
+## ამოცანა და მონაცემები
 
-## TL;DR
+ამოცანაა 48×48 ზომის შავ-თეთრი სახის სურათების მიკუთვნება შვიდი ემოციიდან ერთ-ერთისთვის:
+ბრაზი, ზიზღი (Disgust), შიში, სიხარული, მწუხარება, გაკვირვება და ნეიტრალური. ეს ჩანს
+მარტივ ამოცანად, მაგრამ რეალურად რთულია: სურათები პატარაა, ხშირად დაბინდული ან
+ნაწილობრივ დაფარული, და თვით ადამიანის სიზუსტეც კი ამ მონაცემებზე დაახლოებით 65%-ია.
+ეს რიცხვი მნიშვნელოვანი ორიენტირია — თუ მოდელი ტრენინგზე 98%-ს აღწევს, ეს უკვე ეჭვის
+საფუძველია, რომ ის მონაცემებს იმახსოვრებს და არა განზოგადებას სწავლობს.
 
-- **6 architectures** forming a clear story: `Linear → MLP → SmallCNN → RegularizedCNN → DeepCNN → ResidualCNN`.
-- **Forward/backward sanity checks** (initial-loss, overfit-a-batch, gradient check) before any long run.
-- **One W&B run per architecture/config**, organized MLflow-style with `group` (architecture) and `job_type` (underfit/overfit/fit/sweep).
-- **Hyperparameter sweeps** (W&B Bayesian search) for the two strongest models.
-- **Deliberate ablations** (LR too high, SGD vs Adam) so the analysis points at concrete failure curves.
-- A reproducible **Colab notebook** runs the whole study end-to-end.
+სატრენინგო ფაილი `train.csv` შეიცავს დაახლოებით 28,700 დანომრილ მაგალითს. მე ის
+ვყავი სატრენინგო (90%) და სავალიდაციო (10%) ნაწილებად, თანაც **stratified** წესით —
+ანუ ისე, რომ თითოეული ემოციის პროპორცია ორივე ნაწილში დაცული იყოს. ეს გადაწყვეტილება
+შემთხვევითი არ არის: `Disgust` კლასი დანარჩენებზე დაახლოებით ათჯერ იშვიათია, და უბრალო
+შემთხვევითმა დაყოფამ შეიძლება ის სავალიდაციო ნაწილში თითქმის სრულიად არ მოახვედროს,
+რაც ვალიდაციის შედეგს არასანდოს გახდიდა.
 
----
+ცალკე უნდა აღინიშნოს `test.csv` — მას ლეიბლები **არ** აქვს (მხოლოდ `pixels` სვეტი), ამიტომ
+მასზე accuracy-ს გამოთვლა შეუძლებელია; ის მხოლოდ Kaggle-ის ლიდერბორდისთვის გამოდგება.
+სწორედ ამიტომ მთელი შეფასება ვალიდაციის ნაწილზე ხდება, რომელსაც ლეიბლები აქვს.
 
-## Dataset
+## მუშაობის მეთოდი
 
-FER2013: 35,887 grayscale **48×48** face images, **7 emotions**
-(`Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral`). We use `fer2013.csv`
-(Kaggle dataset `deadskull7/fer2013`) because it keeps the official `Usage` column:
+მთავარი პრინციპი იყო: **თითო ექსპერიმენტში ვცვლი მხოლოდ ერთ რამეს**, წინასწარ ვწერ
+მოლოდინს და შემდეგ მრუდებით ვამოწმებ, გამართლდა თუ არა. ეს მნიშვნელოვანია, რადგან თუ
+ერთდროულად რამდენიმე რამეს შევცვლი (არქიტექტურა, learning rate, რეგულარიზაცია), ვეღარ
+ვიტყვი, კონკრეტულად რამ გამოიწვია შედეგის ცვლილება. ამიტომ ექსპერიმენტი 2-სა და 3-ს
+შორის ერთადერთი განსხვავება სწორედ რეგულარიზაციაა — ყველა დანარჩენი (მონაცემები,
+optimizer, learning rate, epoch-ების რაოდენობა) იდენტურია.
 
-| `Usage`       | Rows   | Our role    |
-|---------------|--------|-------------|
-| `Training`    | 28,709 | train       |
-| `PublicTest`  | 3,589  | validation  |
-| `PrivateTest` | 3,589  | test        |
+ყოველი ტრენინგის წინ ვასრულებ მცირე, მაგრამ ძალიან სასარგებლო შემოწმებებს — ე.წ.
+sanity checks-ს. ისინი წუთებში ცხადყოფენ, კოდი გამართულია თუ არა, და მირჩევნია ეს
+ვიცოდე, ვიდრე ნახევარი საათი დავხარჯო ტრენინგზე, რომელიც bug-ის გამოა გაფუჭებული.
 
-The classes are **strongly imbalanced** — `Disgust` has only ~547 examples vs
-~8,989 for `Happy`. This is visible later as the lowest per-class accuracy and is
-why we offer inverse-frequency class weighting.
+## Sanity checks — რატომ ვამოწმებ forward/backward-ს
 
----
+პირველი შემოწმებაა **საწყისი loss-ის** მნიშვნელობა. გაუწვრთნელი მოდელი შვიდ კლასს
+დაახლოებით თანაბრად უნდა ანაწილებდეს, ამიტომ cross-entropy loss საწყისად ≈ ln(7) ≈
+1.946 უნდა იყოს. თუ ეს რიცხვი სრულიად სხვაა, ესე იგი სადღაც bug-ია — არასწორი
+ინიციალიზაცია, არასწორი კლასების რაოდენობა ან ლეიბლების აღრევა.
 
-## Repository structure
+მეორე და ყველაზე გადამწყვეტი შემოწმებაა **ერთ პატარა batch-ზე overfit-ის** მცდელობა.
+თუ მოდელი 64 სურათს ვერ იმახსოვრებს ~100%-მდე, მაშინ პრობლემა მონაცემების სიმცირეში კი
+არა, თვითონ მოდელში ან optimizer-შია — და მთელი მონაცემების ტრენინგსაც აზრი არ აქვს.
+
+მესამეა **გრადიენტების ნაკადის** შემოწმება: ერთი backward-ის შემდეგ ყველა ფენას უნდა
+ჰქონდეს სასრული, არანულოვანი გრადიენტი. ნულოვანი გრადიენტი მკვდარ ფენაზე მიანიშნებს,
+ხოლო ძალიან დიდი — არასტაბილურობაზე.
+
+## W&B-ზე ლოგირება
+
+ლოგირების სტრუქტურა MLflow-ის ლოგიკას იმეორებს: ერთი **project** (`fer2013-experiments`)
+არის მთელი ექსპერიმენტული სივრცე, თითო **run** კი ერთ კონკრეტულ არქიტექტურას/კონფიგურაციას
+შეესაბამება (`01_mlp_baseline`, `02_small_cnn`, `03_regularized_cnn`). ყოველ epoch-ზე
+იწერება train და val loss/accuracy, ბოლოს კი confusion matrix და თითო კლასის accuracy.
+
+განსაკუთრებით მნიშვნელოვანია, რომ ცალკე ვლოგავ `overfit_gap = train_acc − val_acc`-ს.
+ეს ერთი რიცხვი თვალნათლივ აჩვენებს მოდელის ქცევას: როცა ის ნულთან ახლოსაა, მოდელი ან
+კარგად განაზოგადებს, ან underfit-ია; როცა დიდი და მზარდია — overfitting-ია. სწორედ ამ
+მეტრიკის შედარება სამ run-ს შორის ქმნის მთელი კვლევის მთავარ ხაზს.
+
+## რეპოზიტორიის სტრუქტურა
 
 ```
 ML_Wandb/
-├── README.md                     # this file — the iterative story + how to run
+├── README.md
 ├── requirements.txt
-├── notebooks/
-│   └── FER2013_experiments.ipynb # main Colab notebook (setup → sanity → experiments → sweeps → report)
-├── src/
-│   ├── data.py                   # FERDataset, splits, augmentation, class weights
-│   ├── models.py                 # the 6 architectures + build_model() factory
-│   ├── train.py                  # training loop + all W&B logging
-│   ├── utils.py                  # sanity checks (forward/backward) + seeding
-│   ├── experiments.py            # curated, named runs (the iterations + ablations)
-│   └── sweeps.py                 # W&B hyperparameter-sweep runner
-├── sweeps/
-│   ├── sweep_regularized_cnn.yaml
-│   └── sweep_deep_cnn.yaml
-├── scripts/
-│   └── make_wandb_report.py      # bonus: auto-generate a W&B Report
-├── reports/
-│   └── REPORT.md                 # written analysis (basis for the W&B report)
-└── tests/
-    └── smoke_test.py             # fast CPU pipeline check on synthetic data
+├── 01_mlp.ipynb             # MLP, Adam (underfit)
+├── 01_mlp_sgd.ipynb         # MLP, SGD (ოპტიმაიზერის შედარება)
+├── 02_small_cnn.ipynb       # SmallCNN (overfit)
+├── 03_regularized_cnn.ipynb # RegularizedCNN (BatchNorm + Dropout)
+├── 04_resnet.ipynb          # ResNet (48x48-ზე ადაპტირებული)
+├── 05_alexnet.ipynb         # AlexNet (მძიმე FC თავი -> overfit)
+├── 06_googlenet.ipynb       # GoogLeNet / Inception
+├── analysis.ipynb           # გრაფიკები + ანალიზი ქართულად
+├── save_figures.py          # README-ის გრაფიკების გენერაცია
+└── src/
+    ├── data.py              # FERDataset, get_loaders, get_test_loader
+    ├── models.py            # MLP, SmallCNN, RegularizedCNN, ResNetMini, AlexNetSmall, InceptionSmall
+    ├── train.py             # სატრენინგო ციკლი + W&B ლოგირება
+    ├── utils.py             # sanity checks (forward/backward)
+    └── plots.py             # Plotter — გრაფიკები W&B-დან
 ```
 
----
+## გაშვება
 
-## How to run
+1. ერთხელ: `wandb login` (key ინახება `~/.netrc`-ში).
+2. `train.csv` განათავსეთ რეპოზიტორიის მშობელ ფოლდერში (`../train.csv`).
+3. გაუშვით ექსპერიმენტები: `01_mlp.ipynb`, `02_small_cnn.ipynb`, `03_regularized_cnn.ipynb`, `04_resnet.ipynb`, `05_alexnet.ipynb`, `06_googlenet.ipynb`.
+4. ბოლოს გაუშვით `analysis.ipynb` — ის იღებს ყველა run-ს W&B-დან და ხატავს მრუდებს.
 
-### Colab (recommended — needs a GPU)
-1. Open `notebooks/FER2013_experiments.ipynb` in Colab, set runtime to **GPU**.
-2. Add **Colab Secrets** (🔑): `WANDB_KEY`, and optionally `KAGGLE_JSON` (paste
-   the contents of your `kaggle.json`) and `GITHUB_TOKEN` (only if the repo is private).
-3. Run all cells. The notebook clones this repo, installs deps, downloads the data,
-   logs in to W&B, runs the sanity checks, the iterations, the ablations, the
-   sweeps, and finally generates the W&B report.
+## იტერაცია 1 — MLP და underfitting
 
-> **Secrets are never hard-coded.** They are read from Colab Secrets / env vars.
+![MLP — train/val loss და accuracy](images/exp1_mlp.png)
 
-### Local
-```bash
-pip install -r requirements.txt
-python tests/smoke_test.py                 # ~30s CPU check, no data/W&B needed
-# real training (after downloading fer2013.csv):
-python -c "from src.experiments import run_experiment; run_experiment('iter4_deep_cnn', 'fer2013.csv')"
-```
+პირველი მოდელი მაქსიმალურად მარტივია: სურათი იშლება 2304-განზომილებიან ვექტორად და
+გადის ორ fully-connected ფენაში. შეგნებულად დავიწყე ასე სუსტი მოდელით, რომ მქონოდა
+საბაზისო ზღვარი, რომელსაც შემდეგ ვცემ.
 
----
+ჩემი მოლოდინი იყო underfitting, და ზუსტად ასეც მოხდა: ვალიდაციის accuracy ~0.40-ზე
+გაჩერდა და train-თან ერთად, თითქმის პარალელურად მიდიოდა (gap ძალიან პატარაა).
+მნიშვნელოვანია ამის სწორად წაკითხვა — დაბალი accuracy და **პატარა** gap ერთად სწორედ
+underfitting-ის ნიშანია: მოდელი სატრენინგო მონაცემებსაც კი ცუდად ერგება, ამიტომ
+„დასამახსოვრებელი" არაფერი აქვს და overfitting-ი ვერ ვითარდება.
 
-## W&B logging structure (MLflow-style)
+რატომ ხდება ეს? იმიტომ, რომ flatten ანადგურებს სურათის სივრცით სტრუქტურას. სანამ
+ვაბრტყელებთ, მეზობელი პიქსელები ერთმანეთთან ახლოს იყვნენ და ერთად ქმნიდნენ ნიშნებს
+(კიდეები, თვალი, პირის ფორმა); flatten-ის შემდეგ კი ისინი უბრალოდ 2304 დამოუკიდებელი
+რიცხვია, და მოდელს ეს კავშირები ნულიდან უწევს სწავლა — შეზღუდული ტევადობით. ამიტომ აქ
+არ ღირს არც მეტი რეგულარიზაცია (მოდელი ისედაც არ ფიტავს) — სწორი ნაბიჯი უკეთესი
+ინდუქციური bias-ია, ანუ კონვოლუცია.
 
-| MLflow concept     | Here                                                            |
-|--------------------|----------------------------------------------------------------|
-| Experiment         | W&B **project** `fer2013-experiments`                           |
-| Run                | one `wandb.init` per architecture/config                       |
-| Nested grouping    | `group` = architecture family, `job_type` = phase              |
-| Params             | `config` (lr, optimizer, dropout, scheduler, augment, …)       |
-| Metrics (per step) | `train_loss/acc`, `val_loss/acc`, **`overfit_gap`**, `lr`      |
-| Metrics (summary)  | `best_val_acc`, `best_epoch`, `test_acc_best`, `acc_<emotion>` |
-| Artifacts / media  | best-checkpoint artifact, confusion matrix, sample predictions |
+## იტერაცია 2 — SmallCNN და overfitting
 
-`overfit_gap = train_acc − val_acc` is logged every epoch precisely so the
-under/over-fitting behaviour is a first-class, comparable metric across runs.
+![SmallCNN — train/val loss და accuracy](images/exp2_smallcnn.png)
 
----
+მეორე მოდელში დავამატე სამი კონვოლუციური ბლოკი. კონვოლუცია სწორედ იმ ინდუქციურ bias-ს
+ამატებს, რაც MLP-ს აკლდა: ლოკალურობას (ახლომდებარე პიქსელები ერთად მუშავდება) და წონების
+გაზიარებას (ერთი და იგივე ფილტრი მთელ სურათზე გადადის). შედეგად ტრენინგის accuracy
+მკვეთრად, ~0.98-მდე ავიდა — ანუ მოდელს ნამდვილად **შეუძლია** მონაცემების ფიტვა.
 
-## The iterative story (and the reasoning behind each step)
+მაგრამ რეგულარიზაცია (BatchNorm/Dropout) საერთოდ არ მქონდა, FC თავი კი დიდია, ამიტომ
+მოდელმა სატრენინგო ნაკრების დამახსოვრება დაიწყო. ვალიდაცია ~0.54-ზე გაიყინა, gap კი
+სწრაფად გაიზარდა — კლასიკური overfitting.
 
-Each iteration changes **one thing** and we predict + then verify its effect.
+აქ ერთი დეტალია, რომელზეც განსაკუთრებით ღირს მსჯელობა: ვალიდაციის accuracy ~0.54-ზე
+ჩერდება, **მაგრამ ვალიდაციის loss 1.2-დან ~4.0-მდე იზრდება**. ერთი შეხედვით ეს
+წინააღმდეგობრივია — თუ loss იზრდება, accuracy რატომ არ ეცემა? ახსნა ისაა, რომ მოდელი
+სულ უფრო თავდაჯერებული ხდება არასწორ პასუხებშიც. cross-entropy მკაცრად სჯის
+თავდაჯერებულ შეცდომას: თუ მოდელი არასწორ კლასს 0.99 ალბათობას ანიჭებს, loss მკვეთრად
+იზრდება, თუნდაც პროგნოზირებული კლასი (ე.ი. accuracy) არ შეცვლილიყო. ეს overfitting-ის
+ერთ-ერთი ყველაზე ნათელი ნიშანია და სწორედ ის მოტივს მაძლევს შემდეგი ნაბიჯისთვის.
 
-### Iteration 0 — `LinearClassifier` (softmax regression)
-- **What:** a single `Linear(2304 → 7)` over raw pixels.
-- **Why:** establishes the floor — can we beat the 1/7 ≈ 14% chance baseline at all?
-- **Expected:** clear **underfit**; train ≈ val and both low (~30–35%). A linear model
-  can't capture the non-linear structure of faces.
+## იტერაცია 3 — RegularizedCNN (BatchNorm + Dropout)
 
-### Iteration 1 — `MLP`
-- **What:** flatten → 512 → 256 → 7 with ReLU.
-- **Why:** add non-linear capacity. Does raw capacity alone help?
-- **Expected:** better than linear but **still underfits a CNN** — flattening throws
-  away 2D spatial structure, so it must relearn locality from scratch. Adding dropout
-  (`iter1_mlp_dropout`) does **not** help, demonstrating that regularizing an already
-  underfitting model is the wrong move.
+![RegularizedCNN — train/val loss და accuracy](images/exp3_regcnn.png)
 
-### Iteration 2 — `SmallCNN` (no regularization)
-- **What:** 3 conv blocks (32→64→128) + a large FC head, **no** BatchNorm/Dropout.
-- **Why:** introduce the convolutional inductive bias (locality + weight sharing).
-- **Expected:** big jump in train accuracy, but **strong overfitting** — `train_acc`
-  races ahead of `val_acc`, so `overfit_gap` grows. The fat FC head memorizes the
-  training set. This is our canonical overfitting run.
+მესამე მოდელი იგივე CNN-ია, ოღონდ თითო ბლოკში ორი კონვოლუცია, ყოველი კონვოლუციის
+შემდეგ BatchNorm და ბლოკის ბოლოს Dropout(0.4). შეგნებულად დავტოვე ყველაფერი დანარჩენი
+ისეთი, როგორიც ექსპერიმენტ 2-ში იყო, რომ ცვლილების ეფექტი მხოლოდ რეგულარიზაციას
+დავაკისრო.
 
-### Iteration 3 — `RegularizedCNN` (BatchNorm + Dropout, then + augmentation)
-- **What:** double conv per block + **BatchNorm** (stable/faster optimization) +
-  **Dropout** (regularization). Two runs: without and with **augmentation**
-  (random flips + translations).
-- **Why:** directly attack the overfitting from iter 2.
-- **Expected:** the train/val **gap shrinks**; validation accuracy rises.
-  Augmentation shrinks it further by enlarging the effective dataset. A
-  `ReduceLROnPlateau` scheduler drops the LR when val accuracy stalls.
+ორ მექანიზმს განსხვავებული როლი აქვს. BatchNorm აქტივაციებს ნორმალიზებას ახდენს და
+ოპტიმიზაციას ასტაბილურებს — ტრენინგი უფრო სწრაფი და მდგრადია. Dropout კი ტრენინგისას
+ნეირონების ნაწილს შემთხვევით თიშავს, რაც მოდელს უშლის ხელს ზედმეტად დაეყრდნოს
+კონკრეტულ ნეირონებს და, შესაბამისად, ამცირებს დამახსოვრებას.
 
-### Iteration 4 — `DeepCNN` (VGG-style + global average pooling) — best baseline
-- **What:** 4 conv stages (64→128→256→512) and a **GAP** head instead of a giant FC
-  layer, with `AdamW`, weight decay, **cosine** LR schedule and **label smoothing**.
-- **Why:** more representational depth, far fewer head parameters (GAP ⇒ less memorization),
-  and modern training tricks for better generalization.
-- **Expected:** the best validation/test accuracy of the baselines, with a small gap.
+შედეგი მკაფიოა: ვალიდაციის საუკეთესო accuracy ~0.655-მდე ავიდა — სამივე მოდელიდან
+საუკეთესო — და gap ბევრად უფრო კონტროლირებადია, ვიდრე SmallCNN-ში. თუმცა სრულად
+overfitting არ აღმოფხვრილა: ვალიდაციის loss მინიმუმს ~მე-8 epoch-ზე აღწევს და შემდეგ
+ისევ იწყებს ზრდას. ანუ რეგულარიზაციამ პრობლემა შეამცირა, მაგრამ მოდელს ჯერ კიდევ აქვს
+ჭარბი ტევადობა, რომელსაც დამახსოვრებაზე ხარჯავს. სწორედ ეს მიჩვენებს, რომ შემდეგი
+ბუნებრივი ნაბიჯი data augmentation-ი ან early stopping-ია.
 
-### Iteration 5 — `ResidualCNN`
-- **What:** a small ResNet (stem + 3 residual stages + GAP).
-- **Why:** skip connections let us go deeper **without** the optimization degradation
-  that plagues plain deep stacks.
-- **Expected:** comparable-to-best accuracy, stable training at depth.
+## შედარებითი მსჯელობა
 
-### Ablations (failure/analysis runs)
-- `ablation_lr_too_high` (lr = 0.5): the optimizer **diverges/stalls** — loss stays high. Shows what a bad LR looks like on the curves.
-- `ablation_sgd_vs_adam`: SGD+momentum vs Adam — different convergence speed for the same model.
+![ვალიდაციის accuracy სამ არქიტექტურაზე](images/comparison.png)
 
----
+![overfitting gap — train_acc − val_acc](images/gap.png)
 
-## Hyperparameter tuning
+თუ სამ ექსპერიმენტს ერთად შევხედავთ, იკვეთება ნათელი ხაზი. MLP-მა გვაჩვენა, რომ
+ტევადობისა და სწორი ინდუქციური bias-ის გარეშე მოდელი მონაცემებსაც კი ვერ ერგება
+(underfit). SmallCNN-მა დაამტკიცა, რომ კონვოლუცია სწორი არჩევანია, მაგრამ
+რეგულარიზაციის გარეშე ტევადობა დამახსოვრებაში გადაიზრდება (overfit). RegularizedCNN-მა
+კი აჩვენა, რომ პრობლემა არქიტექტურის გადაგდებით კი არ წყდება, არამედ იმავე არქიტექტურის
+სწორი რეგულარიზაციით.
 
-Broad search is delegated to **W&B Sweeps** (Bayesian + Hyperband early-termination)
-for the two strongest architectures:
+ამ მთელ ისტორიას ყველაზე კარგად `overfit_gap`-ის ევოლუცია აჯამებს: MLP-ში ის თითქმის
+ნულია (მაგრამ ცუდი მიზეზით — accuracy დაბალია), SmallCNN-ში დიდი და მზარდი,
+RegularizedCNN-ში კი ზომიერი. ანუ კარგი მოდელი ის არ არის, ვისაც პატარა gap აქვს, არამედ
+ის, ვისაც **მაღალი val accuracy და გონივრული gap ერთად** აქვს.
 
-- `sweeps/sweep_regularized_cnn.yaml` — lr, optimizer, weight_decay, dropout, batch_size, label_smoothing.
-- `sweeps/sweep_deep_cnn.yaml` — lr, weight_decay, dropout, batch_size, label_smoothing.
+ცალკე აღსანიშნავია კლასების დისბალანსი. `Disgust`-ის სიმცირის გამო, confusion matrix-ში
+სწორედ ეს კლასი ზუსტდება ყველაზე ცუდად. ეს კარგად აჩვენებს, თუ რატომ არ არის accuracy
+ერთადერთი საზომი: საშუალო accuracy შეიძლება მაღალი იყოს, მაშინ როცა იშვიათ კლასს მოდელი
+პრაქტიკულად ვერ ცნობს.
 
-```python
-from src.sweeps import run_sweep
-run_sweep(CSV, sweep_yaml="sweeps/sweep_regularized_cnn.yaml", count=20)
-```
-W&B then produces parameter-importance and parallel-coordinates plots automatically.
+## დასკვნა და შემდეგი ნაბიჯები
 
----
+სამმა იტერაციამ დაფარა ის სამი ტიპური სიტუაცია, რომელიც დავალებას აინტერესებდა:
+underfit, overfit და მათ შორის ბალანსი. შემდეგი ნაბიჯები ბუნებრივად გამომდინარეობს
+RegularizedCNN-ის დარჩენილი overfitting-დან:
 
-## Sanity checks (the forward/backward tests)
+- **Data augmentation** (გადაბრუნება/ჭრა) — ეფექტურად ზრდის მონაცემთა მრავალფეროვნებას
+  და სწორედ overfitting-ის წინააღმდეგ მუშაობს; `augment` ფლაგი უკვე არსებობს `data.py`-ში.
+- **Early stopping** — ვინაიდან val loss მე-8 epoch-ის შემდეგ იზრდება, აზრი არ აქვს
+  ბოლომდე ტრენინგს; საუკეთესო მოდელი ისედაც ინახება.
+- **ჰიპერპარამეტრების გადარჩევა** — learning rate, optimizer, weight decay, dropout.
+- **კლასის წონები** — `Disgust`-ის ამოსაცნობად loss-ის შეწონვა იშვიათი კლასის სასარგებლოდ.
 
-Run from `src/utils.py` before trusting any curve (see notebook §3):
+## შენიშვნები
 
-| Check                  | Passing criterion                          | A failure means…                       |
-|------------------------|--------------------------------------------|----------------------------------------|
-| `check_initial_loss`   | random-init loss ≈ `ln(7) = 1.946`         | bad init / wrong #classes / wiring bug |
-| `overfit_small_batch`  | reaches ~100% on a fixed 64-image batch    | broken graph / loss / label pipeline   |
-| `check_gradients`      | every param gets a finite, non-zero grad   | dead path (0) or exploding/NaN grads   |
-
----
-
-## Results
-
-The numbers below are **typical FER2013 ranges** for each design point plus the
-**qualitative behaviour** to expect; fill in the *Your val/test* columns from your
-W&B runs. (Human accuracy on FER2013 is ~65 ± 5%; strong single CNNs reach ~68–72%.)
-
-| Iter | Model            | Behaviour            | Typical val acc | Your val | Your test |
-|------|------------------|----------------------|-----------------|----------|-----------|
-| 0    | LinearClassifier | underfit (floor)     | ~0.31           |          |           |
-| 1    | MLP              | underfit             | ~0.36           |          |           |
-| 2    | SmallCNN         | **overfit**          | ~0.55 (big gap) |          |           |
-| 3    | RegularizedCNN   | fit (gap shrinks)    | ~0.62           |          |           |
-| 4    | DeepCNN          | **best baseline**    | ~0.66–0.70      |          |           |
-| 5    | ResidualCNN      | fit (deep, stable)   | ~0.66–0.70      |          |           |
-
-See `reports/REPORT.md` for the full written analysis and `FER2013_experiments.ipynb`
-for the runnable study. The interactive comparison (curves, confusion matrices,
-sample predictions, sweeps) lives on the W&B project dashboard.
-
----
-
-## Notes
-- **Reproducibility:** `src.utils.set_seed(42)` seeds Python/NumPy/PyTorch.
-- **Mixed precision** (`amp=True`) and `pin_memory` activate only on GPU.
-- **Security:** never commit `kaggle.json`, API keys, or tokens — they're git-ignored
-  and read from Colab Secrets at runtime.
+რეპროდუცირებადობისთვის დაყოფა ფიქსირებული seed-ით ხდება. საიდუმლო მონაცემები
+(`kaggle.json`, API keys) git-ignored-ია და არასდროს ინახება კოდში.

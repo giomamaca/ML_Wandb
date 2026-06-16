@@ -3,6 +3,9 @@ from torch.utils.data import Dataset
 import numpy as np
 import pandas as pd
 
+# pin_memory speeds up host->GPU transfer; enabled only when a GPU is present.
+PIN_MEMORY = torch.cuda.is_available()
+
 class FERDataset(Dataset):
     def __init__(self, df, augment=False, has_labels=True):
         self.pixels = df['pixels'].values
@@ -36,11 +39,11 @@ def get_loaders(train_csv, batch_size=64, augment_train=False, val_ratio=0.1, se
     val_mask = df.index.isin(val_idx)
     train_ds = FERDataset(df[~val_mask], augment=augment_train)
     val_ds   = FERDataset(df[val_mask],  augment=False)
-    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2)
-    val_loader   = torch.utils.data.DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2)
+    train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=PIN_MEMORY)
+    val_loader   = torch.utils.data.DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=PIN_MEMORY)
     return train_loader, val_loader
 
 def get_test_loader(test_csv, batch_size=64):
     df = pd.read_csv(test_csv)
     test_ds = FERDataset(df, augment=False, has_labels=False)
-    return torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+    return torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=PIN_MEMORY)

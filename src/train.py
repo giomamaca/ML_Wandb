@@ -20,7 +20,7 @@ def evaluate(model, loader, criterion, return_preds=False):
     preds_all, y_all = [], []
     with torch.no_grad():
         for x, y in loader:
-            x, y = x.to(DEVICE), y.to(DEVICE)
+            x, y = x.to(DEVICE, non_blocking=True), y.to(DEVICE, non_blocking=True)
             out = model(x)
             loss_sum += criterion(out, y).item() * y.size(0)
             p = out.argmax(1)
@@ -36,6 +36,7 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
           run_name=None, test_loader=None):
     run = wandb.init(project=project, name=run_name, config=config, reinit=True)
     model = model.to(DEVICE)
+    print(f"device: {DEVICE}")
     criterion = nn.CrossEntropyLoss()
     opt_cls = {'adam': torch.optim.Adam, 'sgd': torch.optim.SGD}[config.get('optimizer','adam')]
     kwargs = {'momentum': 0.9} if config.get('optimizer') == 'sgd' else {}
@@ -45,12 +46,14 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
     os.makedirs('checkpoints', exist_ok=True)
     ckpt_path = f"checkpoints/{run_name}.pt"
     best_val_acc = 0.0
+    patience = config.get('patience')      # None => early stopping disabled
+    epochs_no_improve = 0
 
     for epoch in range(config['epochs']):
         model.train()
         loss_sum, correct, n = 0.0, 0, 0
         for x, y in train_loader:
-            x, y = x.to(DEVICE), y.to(DEVICE)
+            x, y = x.to(DEVICE, non_blocking=True), y.to(DEVICE, non_blocking=True)
             optimizer.zero_grad()
             out = model(x)
             loss = criterion(out, y)
@@ -70,7 +73,14 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
+            epochs_no_improve = 0
             torch.save(model.state_dict(), ckpt_path)
+        else:
+            epochs_no_improve += 1
+            if patience is not None and epochs_no_improve >= patience:
+                print(f"early stop at epoch {epoch} "
+                      f"(no val_acc improvement for {patience} epochs)")
+                break
 
     wandb.summary['best_val_acc'] = best_val_acc
 

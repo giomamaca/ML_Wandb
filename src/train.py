@@ -36,7 +36,10 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
           run_name=None, test_loader=None):
     run = wandb.init(project=project, name=run_name, config=config, reinit=True)
     model = model.to(DEVICE)
-    print(f"device: {DEVICE}")
+    if torch.cuda.is_available():
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        print("Using CPU")
     criterion = nn.CrossEntropyLoss()
     opt_cls = {'adam': torch.optim.Adam, 'sgd': torch.optim.SGD}[config.get('optimizer','adam')]
     kwargs = {'momentum': 0.9} if config.get('optimizer') == 'sgd' else {}

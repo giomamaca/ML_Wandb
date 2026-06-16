@@ -18,11 +18,16 @@ sys.path.insert(0, ROOT)
 
 from src.plots import Plotter  # noqa: E402
 
-RUNS = ["01_mlp_baseline", "02_small_cnn", "03_regularized_cnn"]
+RUNS = ["01_mlp_baseline", "02_small_cnn", "03_regularized_cnn",
+        "04_resnet", "05_alexnet", "06_googlenet"]
 CURVE_FILES = {
     "01_mlp_baseline": "images/exp1_mlp.png",
     "02_small_cnn": "images/exp2_smallcnn.png",
     "03_regularized_cnn": "images/exp3_regcnn.png",
+    "04_resnet": "images/exp4_resnet.png",
+    "05_alexnet": "images/exp5_alexnet.png",
+    "06_googlenet": "images/exp6_googlenet.png",
+    "hp_regcnn_aug": "images/exp_aug.png",
 }
 
 

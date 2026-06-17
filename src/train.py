@@ -49,7 +49,7 @@ def train(model, train_loader, val_loader, config, project="fer2013-experiments"
     os.makedirs('checkpoints', exist_ok=True)
     ckpt_path = f"checkpoints/{run_name}.pt"
     best_val_acc = 0.0
-    patience = config.get('patience')      # None => early stopping disabled
+    patience = config.get('patience')
     epochs_no_improve = 0
 
     for epoch in range(config['epochs']):

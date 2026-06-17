@@ -1,10 +1,3 @@
-"""Render the experiment graphs to images/ so the README can embed them.
-
-Pulls the logged runs from W&B and saves: per-experiment train/val curves, the
-val-accuracy comparison, and the overfitting-gap plot. Re-run any time to refresh.
-
-    python save_figures.py
-"""
 
 import os
 import sys
